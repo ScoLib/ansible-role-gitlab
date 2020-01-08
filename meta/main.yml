@@ -1,4 +1,5 @@
 galaxy_info:
+  role_name: gitlab
   author: klgd
   description: GitLab installation for Linux.
   company: ScoLib
