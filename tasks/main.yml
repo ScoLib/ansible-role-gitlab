@@ -14,7 +14,7 @@
 
 # 下载 gitlab 镜像
 - name: 下载 gitlab 镜像 （若执行失败，可忽略）
-  command: "./files/down_images -D -g {{ gitlab_ver }} -r {{ gitlab_runner_ver }} -s {{ gitlab_shell_ver }} -d {{ base_dir }}/down"
+  command: "{{ role_path }}/files/down_images -D -g {{ gitlab_ver }} -r {{ gitlab_runner_ver }} -s {{ gitlab_shell_ver }} -d {{ base_dir }}/down"
   connection: local
   run_once: true
   ignore_errors: true
