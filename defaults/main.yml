@@ -1,23 +1,34 @@
-gitlabVer: "v12.6.2"
-gitlabRunnerVer: "alpine-v12.6.0"
-gitlabShellVer: "v10.3.0"
-kubectlVer: "1.13.12"
-exporterVer: "5.1.0"
-certificatesVer: "20171114-r3"
+gitlab_ver: "v12.6.4"
+gitlab_runner_ver: "alpine-v12.6.0"
+gitlab_shell_ver: "v10.3.0"
+kubectl_ver: "1.13.12"
+exporter_ver: "5.1.0"
+certificates_ver: "20171114-r3"
+# k8s gitlab namespace
+gitlab_namespace: "gitlab"
+gitlab_databse: "gitlabhq_production"
+gitlab_domain: "k8s.lo"
 
-# 离线镜像tar包
-gitlab_ee_offline: "gitlab_ee_{{ gitlabVer }}.tar"
-gitlab_shell_offline: "gitlab_shell_{{ gitlabShellVer }}.tar"
-gitlab_kubectl_offline: "gitlab_kubectl_{{ kubectlVer }}.tar"
-gitlab_exporter_offline: "gitlab_exporter_{{ exporterVer }}.tar"
-gitlab_certificates_offline: "gitlab_certificates_{{ certificatesVer }}.tar"
-gitlab_runner_offline: "gitlab_runner_{{ gitlabRunnerVer }}.tar"
+gitlab_postgresql_ver: "10.11.0-debian-9-r45"
+
+gitlab_helm_set: ""
+
+
+# gitlab offline images tar
+gitlab_ee_offline: "gitlab_ee_{{ gitlab_ver }}.tar"
+gitlab_shell_offline: "gitlab_shell_{{ gitlab_shell_ver }}.tar"
+gitlab_kubectl_offline: "gitlab_kubectl_{{ kubectl_ver }}.tar"
+gitlab_exporter_offline: "gitlab_exporter_{{ exporter_ver }}.tar"
+gitlab_certificates_offline: "gitlab_certificates_{{ certificates_ver }}.tar"
+gitlab_runner_offline: "gitlab_runner_{{ gitlab_runner_ver }}.tar"
 gitlab_gitaly_offline: "gitlab_gitaly_latest.tar"
 
-
-docker_bin: "/opt/kube/bin/docker"
-helm_bin: "/opt/kube/bin/helm"
-
+# ansible workspace
 base_dir: "/etc/ansible"
 
-helm_set: ""
+# Binaries Directory(docker kubectl helm)
+bin_dir: "/opt/kube/bin"
+
+# CA and other components cert/key Directory
+ca_dir: "/etc/kubernetes/ssl"
+

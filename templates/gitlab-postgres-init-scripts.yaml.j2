@@ -1,0 +1,18 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-postgres-init-scripts
+  namespace: {{ gitlab_namespace }}
+  labels:
+    app: gitlab-postgres
+data:
+  init-user-db.sh: |
+    #!/bin/bash
+    set -e
+    
+    export PGPASSWORD=$POSTGRES_PASSWORD
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        CREATE DATABASE {{ gitlab_databse }} OWNER postgres;
+        GRANT ALL PRIVILEGES ON DATABASE {{ gitlab_databse }} TO postgres;
+    EOSQL

@@ -1,56 +1,111 @@
----
 - name: 创建相关目录
   file: name={{ item }} state=directory
   with_items:
   - /opt/kube/images 
+  - /opt/kube/gitlab
 
-# 推送离线docker 镜像，可以忽略执行错误
+# - stat:
+#     path: {{ docker_bin }}
+#   register: docker
+
+# - stat:
+#     path: {{ helm_bin }}
+#   register: helm
+
+# 下载 gitlab 镜像
+- name: 下载 gitlab 镜像 （若执行失败，可忽略）
+  shell: "./files/down_images -D -g {{ gitlab_ver }} -r {{ gitlab_runner_ver }} -s {{ gitlab_shell_ver }} -d {{ base_dir }}/down"
+  connection: local
+  run_once: true
+  ignore_errors: true
 
 - name: 检查是否已下载离线 gitlab 镜像
   command: "ls {{ base_dir }}/down"
   register: download_info
   connection: local
   run_once: true
-- name: 尝试推送离线 docker 镜像（若执行失败，可忽略）
-  copy: src={{ base_dir }}/down/{{ item }} dest=/opt/kube/images/{{ item }}
-  when: 'item in download_info.stdout'
-  with_items:
-  - "{{ gitlab_ee_offline }}"
-  - "{{ gitlab_shell_offline }}"
-  - "{{ gitlab_kubectl_offline }}"
-  - "{{ gitlab_exporter_offline }}"
-  - "{{ gitlab_certificates_offline }}"
-  - "{{ gitlab_runner_offline }}"
-  - "{{ gitlab_gitaly_offline }}"
+
+# 推送离线docker 镜像，可以忽略执行错误
+- block:
+  - name: 尝试推送离线 docker 镜像（若执行失败，可忽略）
+    copy: src={{ base_dir }}/down/{{ item }} dest=/opt/kube/images/{{ item }}
+    when: 'item in download_info.stdout'
+    with_items:
+    - "{{ gitlab_ee_offline }}"
+    - "{{ gitlab_shell_offline }}"
+    - "{{ gitlab_kubectl_offline }}"
+    - "{{ gitlab_exporter_offline }}"
+    - "{{ gitlab_certificates_offline }}"
+    - "{{ gitlab_runner_offline }}"
+    - "{{ gitlab_gitaly_offline }}"
+
+  - name: 获取 gitlab 离线镜像推送情况
+    command: "ls /opt/kube/images"
+    register: image_info
+
+  # 如果目录下有离线镜像，就把它导入到node节点上
+  - name: 导入 gitlab的离线镜像（若执行失败，可忽略）
+    shell: "{{ bin_dir }}/docker load -i /opt/kube/images/{{ item }}"
+    with_items:
+    - "{{ gitlab_ee_offline }}"
+    - "{{ gitlab_shell_offline }}"
+    - "{{ gitlab_kubectl_offline }}"
+    - "{{ gitlab_exporter_offline }}"
+    - "{{ gitlab_certificates_offline }}"
+    - "{{ gitlab_runner_offline }}"
+    - "{{ gitlab_gitaly_offline }}"
+    when: "item in image_info.stdout"
   ignore_errors: true
-- name: 获取 gitlab 离线镜像推送情况
-  command: "ls /opt/kube/images"
-  register: image_info
 
-- stat:
-    path: {{ docker_bin }}
-  register: docker
+- block:
+  - name: 创建 gitlab namespace
+    shell: "{{ bin_dir }}/kubectl create namespace {{ gitlab_namespace }}"
+  
+  - block:
+    - name: 检查是否已存在 gitlab 相关域名证书
+      command: "ls {{ ca_dir }}"
+      register: gitlab_ca_info
 
-# 如果目录下有离线镜像，就把它导入到node节点上
-- name: 导入 gitlab的离线镜像（若执行失败，可忽略）
-  shell: "{{ docker_bin }} load -i /opt/kube/images/{{ item }}"
-  with_items:
-  - "{{ gitlab_ee_offline }}"
-  - "{{ gitlab_shell_offline }}"
-  - "{{ gitlab_kubectl_offline }}"
-  - "{{ gitlab_exporter_offline }}"
-  - "{{ gitlab_certificates_offline }}"
-  - "{{ gitlab_runner_offline }}"
-  - "{{ gitlab_gitaly_offline }}"
-  ignore_errors: true
-  when: "item in image_info.stdout and docker.stat.exists"
+    - name: 创建证书
+      command: "openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+              -keyout {{ ca_dir }}/{{ gitlab_domain }}.key \
+              -out {{ ca_dir }}/{{ gitlab_domain }}.crt \
+              -subj '/CN=*.{{ gitlab_domain }}'"
+      when: "gitlab_domain not in gitlab_ca_info.stdout"
 
-- stat:
-    path: {{ helm_bin }}
-  register: helm
+  - block:
+    - name: 创建 secret gitlab-ingress-tls
+      shell: "{{ bin_dir }}/kubectl -n {{ gitlab_namespace }} \
+            create secret tls gitlab-ingress-tls \
+            --cert {{ ca_dir }}/{{ gitlab_domain }}.crt \
+            --key {{ ca_dir }}/{{ gitlab_domain }}.key"
 
-- name: 部署 gitlab
-  shell: "{{ helm_bin }} install gitlab/gitlab"
+    - name: 创建 secret gitlab-runner-certs-secret
+      shell: "{{ bin_dir }}/kubectl -n {{ gitlab_namespace }} \
+            create secret generic gitlab-runner-certs-secret \
+            --from-file=gitlab.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt  \
+            --from-file=registry.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt \
+            --from-file=minio.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt"
+  
+  - block:
+    - name: 准备 gitlab 的部署文件
+      template: src={{ item }}.yaml.j2 dest=/opt/kube/gitlab/{{ item }}.yaml
+      with_items:
+        - gitlab-postgres-init-scripts
+        - gitlab-values
+
+    - name: 创建 gitlab-postgres-init-scripts ConfigMap
+      shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/gitlab/gitlab-postgres-init-scripts.yaml"
+
+    - name: 创建 postgres 
+      shell: "{{ bin_dir }}/helm install gitlab-postgres stable/postgresql \
+            -n {{ gitlab_namespace }} \
+            --set image.tag={{ gitlab_postgresql_ver }} \
+            --set postgresqlDatabase=postgres \
+            --set initdbScriptsConfigMap=gitlab-postgres-init-scripts"
+
+  - name: 部署 gitlab
+    shell: "{{ bin_dir }}/helm install gitlab -f /opt/kube/gitlab/gitlab-values.yaml --set {{ gitlab_helm_set }} gitlab/gitlab"
+
   connection: local
   run_once: true
-  when: helm.stat.exists

@@ -1,0 +1,115 @@
+#!/bin/bash
+
+set -o nounset
+set -o errexit
+
+export GITLAB_VER=v12.6.4
+export RUNNER_VER=alpine-v12.6.0
+export SHELL_VER=v10.3.0
+export IMAGE_DIR=/etc/ansible/down
+
+function download_all() {
+  kubectlVer=1.13.12
+  exporterVer=5.1.0
+  certificatesVer=20171114-r3
+  
+  [[ -d "$IMAGE_DIR" ]] || { echo "[ERROR] $IMAGE_DIR not existed!"; exit 1; }
+
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_ee_$GITLAB_VER.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-unicorn-ee:${GITLAB_VER} && \
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ee:${GITLAB_VER} && \
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-sidekiq-ee:${GITLAB_VER} && \
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-workhorse-ee:${GITLAB_VER} && \
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-rails-ee:${GITLAB_VER} && \
+    docker save -o ${IMAGE_DIR}/gitlab_ee_${GITLAB_VER}.tar registry.gitlab.com/gitlab-org/build/cng/gitlab-unicorn-ee:${GITLAB_VER} registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ee:${GITLAB_VER} registry.gitlab.com/gitlab-org/build/cng/gitlab-sidekiq-ee:${GITLAB_VER} registry.gitlab.com/gitlab-org/build/cng/gitlab-workhorse-ee:${GITLAB_VER} registry.gitlab.com/gitlab-org/build/cng/gitlab-rails-ee:${GITLAB_VER}
+  fi
+  if [[ ! -f "$IMAGE_DIR/gitlab_shell_$SHELL_VER.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:${SHELL_VER} && \
+    docker save -o ${IMAGE_DIR}/gitlab_shell_${SHELL_VER}.tar registry.gitlab.com/gitlab-org/build/cng/gitlab-shell:${SHELL_VER}
+  fi
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_gitaly_latest.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitaly:latest && \
+    docker save -o ${IMAGE_DIR}/gitlab_gitaly_latest.tar registry.gitlab.com/gitlab-org/build/cng/gitaly:latest
+  fi
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_kubectl_$kubectlVer.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/kubectl:${kubectlVer} && \
+    docker save -o ${IMAGE_DIR}/gitlab_kubectl_${kubectlVer}.tar registry.gitlab.com/gitlab-org/build/cng/kubectl:${kubectlVer}
+  fi
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_exporter_$exporterVer.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/gitlab-exporter:${exporterVer} && \
+    docker save -o ${IMAGE_DIR}/gitlab_exporter_${exporterVer}.tar registry.gitlab.com/gitlab-org/build/cng/gitlab-exporter:${exporterVer}
+  fi
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_certificates_${certificatesVer}.tar" ]];then
+    docker pull registry.gitlab.com/gitlab-org/build/cng/alpine-certificates:${certificatesVer} && \
+    docker save -o ${IMAGE_DIR}/gitlab_certificates_${certificatesVer}.tar registry.gitlab.com/gitlab-org/build/cng/alpine-certificates:${certificatesVer}
+  fi
+
+
+  if [[ ! -f "$IMAGE_DIR/gitlab_runner_${RUNNER_VER}.tar" ]];then
+    docker pull gitlab/gitlab-runner:${RUNNER_VER} && \
+    docker save -o ${IMAGE_DIR}/gitlab_runner_${RUNNER_VER}.tar gitlab/gitlab-runner:${RUNNER_VER}
+  fi
+
+}
+
+function usage() {
+  cat <<EOF
+Usage: down_images [options] [args]
+  option: -{Dgrsd}
+    -D         download all into IMAGE_DIR
+    -g <ver>   set gitlab-ee version, default "$GITLAB_VER"
+    -r <ver>   set gitlab-runner version, default "$RUNNER_VER"
+    -s <ver>   set gitlab-shell version, default "$SHELL_VER"
+    -d <ver>   set docker image path, default "$IMAGE_DIR"
+EOF
+} 
+
+### Main Lines ##################################################
+function main() {
+  # check if use bash shell
+  readlink /proc/$$/exe|grep -q "dash" && { echo "[ERROR] you should use bash shell, not sh"; exit 1; }
+  # check if use with root
+  [[ "$EUID" -ne 0 ]] && { echo "[ERROR] you should run this script as root"; exit 1; }
+  
+  [[ "$#" -eq 0 ]] && { usage >&2; exit 1; }
+  
+  export REGISTRY_MIRROR="CN"
+  ACTION=""
+  while getopts "Dg:r:s:d:" OPTION; do
+      case "$OPTION" in
+        D)
+          ACTION="download_all"
+          ;;
+        g)
+          export GITLAB_VER="$OPTARG"
+          ;;
+        r)
+          export RUNNER_VER="$OPTARG"
+          ;;
+        s)
+          export SHELL_VER="$OPTARG"
+          ;;
+        d)
+          export IMAGE_DIR="$OPTARG"
+          ;;
+        ?)
+          usage
+          exit 1
+          ;;
+      esac
+  done
+  
+  [[ "$ACTION" == "" ]] && { echo "[ERROR] illegal option"; usage; exit 1; }
+  
+  # excute cmd "$ACTION" 
+  echo -e "[INFO] \033[33mAction begin\033[0m : $ACTION"
+  ${ACTION} || { echo -e "[ERROR] \033[31mAction failed\033[0m : $ACTION"; return 1; }
+  echo -e "[INFO] \033[32mAction successed\033[0m : $ACTION"
+}
+
+main "$@"
