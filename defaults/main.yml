@@ -31,4 +31,3 @@ bin_dir: "/opt/kube/bin"
 
 # CA and other components cert/key Directory
 ca_dir: "/etc/kubernetes/ssl"
-

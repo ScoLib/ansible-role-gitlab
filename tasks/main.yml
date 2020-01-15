@@ -1,7 +1,7 @@
 - name: 创建相关目录
   file: name={{ item }} state=directory
   with_items:
-  - /opt/kube/images 
+  - /opt/kube/images
   - /opt/kube/gitlab
 
 # - stat:
@@ -14,7 +14,7 @@
 
 # 下载 gitlab 镜像
 - name: 下载 gitlab 镜像 （若执行失败，可忽略）
-  shell: "./files/down_images -D -g {{ gitlab_ver }} -r {{ gitlab_runner_ver }} -s {{ gitlab_shell_ver }} -d {{ base_dir }}/down"
+  command: "./files/down_images -D -g {{ gitlab_ver }} -r {{ gitlab_runner_ver }} -s {{ gitlab_shell_ver }} -d {{ base_dir }}/down"
   connection: local
   run_once: true
   ignore_errors: true
@@ -45,7 +45,7 @@
 
   # 如果目录下有离线镜像，就把它导入到node节点上
   - name: 导入 gitlab的离线镜像（若执行失败，可忽略）
-    shell: "{{ bin_dir }}/docker load -i /opt/kube/images/{{ item }}"
+    command: "{{ bin_dir }}/docker load -i /opt/kube/images/{{ item }}"
     with_items:
     - "{{ gitlab_ee_offline }}"
     - "{{ gitlab_shell_offline }}"
@@ -59,8 +59,8 @@
 
 - block:
   - name: 创建 gitlab namespace
-    shell: "{{ bin_dir }}/kubectl create namespace {{ gitlab_namespace }}"
-  
+    command: "{{ bin_dir }}/kubectl create namespace {{ gitlab_namespace }}"
+
   - block:
     - name: 检查是否已存在 gitlab 相关域名证书
       command: "ls {{ ca_dir }}"
@@ -86,7 +86,7 @@
             --from-file=gitlab.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt  \
             --from-file=registry.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt \
             --from-file=minio.{{ gitlab_domain }}.crt={{ ca_dir }}/{{ gitlab_domain }}.crt"
-  
+
   - block:
     - name: 准备 gitlab 的部署文件
       template: src={{ item }}.yaml.j2 dest=/opt/kube/gitlab/{{ item }}.yaml
@@ -97,7 +97,7 @@
     - name: 创建 gitlab-postgres-init-scripts ConfigMap
       shell: "{{ bin_dir }}/kubectl apply -f /opt/kube/gitlab/gitlab-postgres-init-scripts.yaml"
 
-    - name: 创建 postgres 
+    - name: 创建 postgres
       shell: "{{ bin_dir }}/helm install gitlab-postgres stable/postgresql \
             -n {{ gitlab_namespace }} \
             --set image.tag={{ gitlab_postgresql_ver }} \
@@ -105,7 +105,7 @@
             --set initdbScriptsConfigMap=gitlab-postgres-init-scripts"
 
   - name: 部署 gitlab
-    shell: "{{ bin_dir }}/helm install gitlab -f /opt/kube/gitlab/gitlab-values.yaml --set {{ gitlab_helm_set }} gitlab/gitlab"
+    command: "{{ bin_dir }}/helm install gitlab -f /opt/kube/gitlab/gitlab-values.yaml --set {{ gitlab_helm_set }} gitlab/gitlab"
 
   connection: local
   run_once: true
